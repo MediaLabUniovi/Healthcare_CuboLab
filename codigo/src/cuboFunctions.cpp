@@ -9,8 +9,8 @@ float ax_values[6];  // Para almacenar ax de cada lado
 float ay_values[6];  // Para almacenar ay de cada lado
 float az_values[6];  // Para almacenar az de cada lado
 
-int minBatt = 2600; // Valor mínimo de la batería con divisor de 0.35: 5,95V
-int maxBatt = 3600; // Valor mínimo de la batería con divisor de 0.35: 8,2V
+int minBatt = 2630; // Valor mínimo de la batería con divisor de 0.35: 5,95V
+int maxBatt = 3680; // Valor mínimo de la batería con divisor de 0.35: 8,2V
 
 void getLimits() {
   /* Recuperar los valores de los ejes x, y , z de la memoria no volatil para cada lado del cubo después de un reseteo */
@@ -164,6 +164,9 @@ void configHMI(){
 
 void chargingHMI(){
   // Función para indicar que se está cargando el cubo
+    if (getBattery()==100){
+      analogWrite(led_g, 0);
+    } else{
     ledsOff();
     for (int brillo = 0; brillo <= 255; brillo++) {
     analogWrite(led_g, brillo);
@@ -175,6 +178,7 @@ void chargingHMI(){
     delayLab(10);
     }
     ledsOff();
+  }
 }
 
 void testLowBattery(){
