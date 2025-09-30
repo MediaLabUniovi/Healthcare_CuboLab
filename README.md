@@ -68,7 +68,7 @@ The systems toggles between three states goberned which indicate whether the cub
 | G33      | Vcharge       | Pin used to detect if the charger is connected       |
 | G34       | Vbat       | Pin used to meassure the battery voltage       |
 | G21 | SDA | Pin used by I2C data transmission |
-| G22 | SCL | Pin used by I2C clock |
+| G22 | SCL  | Pin used by I2C clock |
 | G14 | PIN14 | Pin used for the wakeup IMU interrupt |
 | G18 | PIN18 | Pin used to activate the buzzer |
 | G25 | PIN25 | LED red Pin |
