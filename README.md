@@ -57,7 +57,7 @@ This repository contains the code and schematics for an **Emotions cube** projec
 
 ## General flowchart
 
-The systems toggles between three states goberned which indicate whether the cube is in motion detection, charging and configuration, and only charging. Indicating the level of cahrge after disconnection.
+The systems toggles between three states goberned which indicate whether the cube is in motion detection, charging and configuration, and only charging. Indicating the level of charge after disconnection.
 
 <img src="https://github.com/user-attachments/assets/72a10f76-19d9-4fb1-bb84-207e6a488bdb" alt="General" width="400">
 
