@@ -1,19 +1,17 @@
-# CuboLab - Interfaz de Análisis de Datos de Enfermería
+# CuboLab - Interfaz de Análisis de Datos
 
-## 📋 Descripción
+## Descripción
 
-Conjunto de aplicaciones desarrolladas con **Streamlit** que permiten analizar y visualizar datos relacionados con enfermeras, pacientes, residentes y los cubos empleados en el laboratorio de salud CuboLab.
+Conjunto de aplicaciones desarrolladas con **Streamlit** que permiten analizar y visualizar datos relacionados con enfermeras, pacientes, residentes y los cubos empleados.
 
 Las aplicaciones están diseñadas para facilitar la interacción y actualización de los datos almacenados en servidores externos. Los usuarios pueden seleccionar diferentes tablas, realizar análisis específicos y visualizar la información de manera clara y comprensible. Se incluyen predicciones de emociones para días futuros y análisis de texto de comentarios/intervenciones.
 
-Los datos provienen de estudios realizados con residentes de Medialab durante diciembre de 2024 y posteriores.
-
 ---
 
-## 🎯 Características Principales
+## Características Principales
 
-- **Actualización de la base de datos**: Botón para actualizar los datos con un solo clic directamente desde servidores externos.
-- **Visualización de datos**: Muestra tablas con información relevante (enfermeras, pacientes, personal, etc.) con múltiples columnas de análisis.
+- **Actualización de la base de datos**: botón para actualizar los datos con un solo clic directamente desde servidores externos.
+- **Visualización de datos**: muestra tablas con información relevante (enfermeras, pacientes, personal, etc.) con múltiples columnas de análisis.
 - **Interfaz intuitiva**: Desplegables y selectores para navegar fácilmente entre distintos análisis y tablas.
 - **Análisis y predicción**: Opciones de análisis específicos con gráficos interactivos y predicciones de emociones usando modelos SARIMAX.
 - **Análisis de texto**: Visualización mediante nubes de palabras según la emoción a partir de comentarios/intervenciones.
@@ -21,7 +19,7 @@ Los datos provienen de estudios realizados con residentes de Medialab durante di
 
 ---
 
-## 📁 Estructura del Proyecto
+## Estructura del Proyecto
 
 ```
 Data_analysis/
@@ -51,7 +49,7 @@ Data_analysis/
 
 ---
 
-## 🚀 Guía de Instalación y Ejecución
+## Guía de Instalación y Ejecución
 
 ### Requisitos Previos
 
@@ -121,7 +119,7 @@ Una vez ejecutado, Streamlit abrirá una ventana en tu navegador (generalmente e
 
 ---
 
-## 📊 Interfaz de Emociones (`interfaz_emociones_descritas.py`)
+## Interfaz de Emociones (`interfaz_emociones_descritas.py`)
 
 ### ¿Qué hace?
 
@@ -142,14 +140,6 @@ Este script proporciona un análisis interactivo de las emociones registradas de
 - **statsmodels**: Modelos estadísticos avanzados (SARIMAX para predicciones)
 - **requests**: Descargar datos desde servidores externos
 
-### Flujo de Uso
-
-1. Ejecutar el script con `streamlit run`
-2. Seleccionar un usuario del desplegable
-3. Visualizar la gráfica histórica de emociones
-4. Ajustar el número de días a predecir (slider)
-5. Ver las predicciones en la gráfica actualizada y en la tabla
-
 ### Fuente de Datos
 
 Los datos se descargan directamente desde un servidor OSF (Open Science Framework) mediante URLs específicas configuradas en el script.
@@ -163,12 +153,12 @@ Los datos se descargan directamente desde un servidor OSF (Open Science Framewor
 Este script proporciona un análisis completo y flexible de múltiples tablas de datos en la base de datos de CuboLab. Permite:
 
 - **Seleccionar y visualizar diferentes tablas**: Enfermeras, Pacientes, Centros, Intervenciones, Medidas, Sesiones, Sensores, etc.
-- **Filtrar por Centro**: Opción para filtrar todos los análisis por un centro específico
-- **Análisis estadísticos específicos**: Cada tabla tiene análisis customizados (distribuciones, gráficos comparativos, evoluciones temporales)
-- **Análisis de Intervenciones**: Visualización de intervenciones por enfermera, paciente o tipo
-- **Análisis de Medidas**: Estado emocional de pacientes, niveles de batería, evolución temporal
-- **Predicciones**: Modelos ARIMA y Exponential Smoothing para predecir valores futuros
-- **Filtrado de datos**: Actualización dinámica de datos locales con botón de refresh
+- **Filtrar por Centro**: opción para filtrar todos los análisis por un centro específico.
+- **Análisis estadísticos específicos**: cada tabla tiene análisis customizados (distribuciones, gráficos comparativos, evoluciones temporales).
+- **Análisis de Intervenciones**: visualización de intervenciones por enfermera, paciente o tipo.
+- **Análisis de Medidas**: estado emocional de pacientes, niveles de batería, evolución temporal.
+- **Predicciones**: modelos ARIMA y Exponential Smoothing para predecir valores futuros.
+- **Filtrado de datos**: actualización dinámica de datos locales con botón de refresh.
 
 ### Dependencias Principales
 
@@ -192,39 +182,25 @@ La interfaz permite analizar las siguientes tablas:
 | **Sesiones** | Sesiones registradas | Análisis temporal |
 | **Sensores** | Información de sensores | Tipos y estado |
 
-### Flujo de Uso
-
-1. Ejecutar el script con `streamlit run`
-2. Seleccionar una tabla del desplegable principal
-3. Opcionalmente, filtrar por centro
-4. Elegir un análisis específico de la tabla seleccionada
-5. Visualizar gráficos y datos interactivos
-
 ### Fuente de Datos
 
-Los datos se cargan desde archivos CSV locales almacenados en la carpeta `/data`:
-- enfermeras.csv
-- pacientes.csv
-- centros.csv
-- intervenciones.csv
-- medidas.csv
-- Y otros archivos de datos
+Los datos se cargan desde archivos CSV locales almacenados en la carpeta `/data`.
 
 ---
 
-## 📊 Interfaz de Residentes (`interfaz_real_residentes.py`)
+## Interfaz de Residentes (`interfaz_real_residentes.py`)
 
 ### ¿Qué hace?
 
 Este script combina análisis de emociones con procesamiento avanzado de lenguaje natural (NLP) para analizar comentarios de residentes. Proporciona:
 
-- **Análisis temporal de emociones**: Gráficas escalonadas de emociones históricas por usuario
-- **Predicción de emociones futuras**: Modelos SARIMAX para predecir emociones 1-30 días en el futuro
-- **Análisis de comentarios**: Relación entre palabras y emociones mediante TF-IDF
-- **Visualización de patrones**: Heatmaps mostrando palabras dominantes por emoción
-- **Nubes de palabras**: WordCloud generadas automáticamente por cada emoción
-- **Clustering de comentarios**: Agrupación automática de comentarios similares mediante K-Means y PCA
-- **Descarga de resultados**: Exportar análisis clustereados a CSV
+- **Análisis temporal de emociones**: bráficas escalonadas de emociones históricas por usuario.
+- **Predicción de emociones futuras**: Mmdelos SARIMAX para predecir emociones 1-30 días en el futuro.
+- **Análisis de comentarios**: relación entre palabras y emociones mediante TF-IDF.
+- **Visualización de patrones**: heatmaps mostrando palabras dominantes por emoción.
+- **Nubes de palabras**: WordCloud generadas automáticamente por cada emoción.
+- **Clustering de comentarios**: agrupación automática de comentarios similares mediante K-Means y PCA.
+- **Descarga de resultados**: exportar análisis clustereados a CSV.
 
 ### Dependencias Principales
 
@@ -254,19 +230,6 @@ Este script combina análisis de emociones con procesamiento avanzado de lenguaj
 - **WordCloud**: Visualización estética de palabras más frecuentes por emoción
 - **Clustering**: Agrupa comentarios similares mediante K-Means (3 clusters)
 
-### Flujo de Uso
-
-1. Ejecutar el script con `streamlit run`
-2. Seleccionar un usuario del desplegable
-3. Visualizar gráfica histórica de emociones
-4. Configurar días a predecir y ver predicciones
-5. Explorar análisis de comentarios:
-   - Ver relación de palabras y emociones
-   - Visualizar heatmap de términos por emoción
-   - Examinar nubes de palabras por emoción
-   - Ver clustering de comentarios
-6. Descargar resultados en CSV
-
 ### Preprocesamiento de Texto
 
 El script realiza preprocesamiento automático:
@@ -278,47 +241,4 @@ El script realiza preprocesamiento automático:
 ### Fuente de Datos
 
 Los datos se cargan desde un archivo CSV local:
-- `df_real_descargado.csv`: Contiene datos de residentes con columnas `id_paciente`, `fecha`, `emocion` y `comentario`
-
----
-
-## �🔧 Configuración y Personalización
-
-### Modificar URLs de Datos
-
-En `interfaz_emociones_descritas.py`, edita el diccionario `urls` para cambiar la fuente de datos:
-
-```python
-urls = {
-    "emociones.csv": "https://osf.io/download/<tu-id-osf>/",
-}
-```
-
-### Ajustar Parámetros de Predicción
-
-Puedes modificar los parámetros del modelo SARIMAX en el script:
-
-```python
-modelo = SARIMAX(emociones_diarias, order=(1, 1, 1), seasonal_order=(0, 1, 1, 7))
-```
-
----
-
-## 📝 Notas Importantes
-
-- Los datos se cargan desde servidores externos, por lo que se requiere **conexión a internet**.
-- El botón "Actualizar Base de Datos" permite refrescar los datos sin reiniciar la aplicación.
-- Las predicciones están basadas en patrones históricos y pueden no ser 100% precisas.
-- Los datos utilizados provienen de estudios en Medialab durante diciembre de 2024.
-
----
-
-## 👥 Autor/es
-
-Desarrollado por el equipo de CuboLab Healthcare.
-
----
-
-## 📄 Licencia
-
-Este proyecto es parte de la iniciativa CuboLab Healthcare.
+- `df_real_descargado.csv`: Contiene datos de residentes con columnas `id_paciente`, `fecha`, `emocion` y `comentario`.
