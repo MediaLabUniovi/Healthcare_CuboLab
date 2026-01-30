@@ -134,11 +134,11 @@ Este script proporciona un análisis interactivo de las emociones registradas de
 
 ### Dependencias Principales
 
-- **streamlit**: Framework para crear interfaces web interactivas
-- **pandas**: Análisis y manipulación de datos
-- **plotly**: Gráficas interactivas
-- **statsmodels**: Modelos estadísticos avanzados (SARIMAX para predicciones)
-- **requests**: Descargar datos desde servidores externos
+- **streamlit**: framework para crear interfaces web interactivas.
+- **pandas**: análisis y manipulación de datos.
+- **plotly**: gráficas interactivas.
+- **statsmodels**: modelos estadísticos avanzados (SARIMAX para predicciones).
+- **requests**: descargar datos desde servidores externos.
 
 ### Fuente de Datos
 
@@ -146,7 +146,7 @@ Los datos se descargan directamente desde un servidor OSF (Open Science Framewor
 
 ---
 
-## � Interfaz General (`interfaz_tablas_analisis.py`)
+## Interfaz General (`interfaz_tablas_analisis.py`)
 
 ### ¿Qué hace?
 
@@ -162,10 +162,10 @@ Este script proporciona un análisis completo y flexible de múltiples tablas de
 
 ### Dependencias Principales
 
-- **streamlit**: Framework para crear interfaces web interactivas
-- **pandas**: Análisis y manipulación de datos
-- **altair**: Gráficas interactivas y visualizaciones
-- **statsmodels**: Modelos estadísticos para predicciones (ARIMA, ExponentialSmoothing)
+- **streamlit**: framework para crear interfaces web interactivas.
+- **pandas**: análisis y manipulación de datos.
+- **altair**: gráficas interactivas y visualizaciones.
+- **statsmodels**: modelos estadísticos para predicciones (ARIMA, ExponentialSmoothing).
 
 ### Tablas Disponibles
 
@@ -194,8 +194,8 @@ Los datos se cargan desde archivos CSV locales almacenados en la carpeta `/data`
 
 Este script combina análisis de emociones con procesamiento avanzado de lenguaje natural (NLP) para analizar comentarios de residentes. Proporciona:
 
-- **Análisis temporal de emociones**: bráficas escalonadas de emociones históricas por usuario.
-- **Predicción de emociones futuras**: Mmdelos SARIMAX para predecir emociones 1-30 días en el futuro.
+- **Análisis temporal de emociones**: gráficas escalonadas de emociones históricas por usuario.
+- **Predicción de emociones futuras**: modelos SARIMAX para predecir emociones 1-30 días en el futuro.
 - **Análisis de comentarios**: relación entre palabras y emociones mediante TF-IDF.
 - **Visualización de patrones**: heatmaps mostrando palabras dominantes por emoción.
 - **Nubes de palabras**: WordCloud generadas automáticamente por cada emoción.
@@ -204,39 +204,39 @@ Este script combina análisis de emociones con procesamiento avanzado de lenguaj
 
 ### Dependencias Principales
 
-- **streamlit**: Framework para interfaces web
-- **pandas & numpy**: Manipulación de datos
-- **plotly**: Gráficas interactivas
-- **statsmodels**: Modelos SARIMAX para predicciones
-- **scikit-learn**: TF-IDF, PCA, K-Means clustering
-- **wordcloud**: Generación de nubes de palabras
-- **matplotlib & seaborn**: Visualizaciones estáticas (heatmaps, gráficos)
+- **streamlit**: framework para interfaces web.
+- **pandas & numpy**: manipulación de datos.
+- **plotly**: gráficas interactivas.
+- **statsmodels**: modelos SARIMAX para predicciones.
+- **scikit-learn**: TF-IDF, PCA, K-Means clustering.
+- **wordcloud**: generación de nubes de palabras.
+- **matplotlib & seaborn**: visualizaciones estáticas (heatmaps, gráficos).
 
 ### Funcionalidades Principales
 
 #### 1. Análisis Temporal
-- Seleccionar usuario específico
-- Visualizar línea temporal de emociones
-- Ver comentarios asociados al pasar el cursor
+- Seleccionar usuario específico.
+- Visualizar línea temporal de emociones.
+- Ver comentarios asociados al pasar el cursor.
 
 #### 2. Predicción SARIMAX
-- Predicción configurable (1-30 días)
-- Gráficas comparativas histórico + predicción
-- Tabla descargable con predicciones
+- Predicción configurable (1-30 días).
+- Gráficas comparativas histórico + predicción.
+- Tabla descargable con predicciones.
 
 #### 3. Análisis de Texto
-- **TF-IDF Vectorization**: Extrae palabras clave por emoción
-- **Heatmap**: Matriz de palabras vs emociones mostrando relevancia
-- **WordCloud**: Visualización estética de palabras más frecuentes por emoción
-- **Clustering**: Agrupa comentarios similares mediante K-Means (3 clusters)
+- **TF-IDF Vectorization**: extrae palabras clave por emoción.
+- **Heatmap**: matriz de palabras vs emociones mostrando relevancia.
+- **WordCloud**: visualización estética de palabras más frecuentes por emoción.
+- **Clustering**: agrupa comentarios similares mediante K-Means (3 clusters).
 
 ### Preprocesamiento de Texto
 
 El script realiza preprocesamiento automático:
-- Conversión a minúsculas
-- Eliminación de caracteres especiales
-- Limpieza de espacios en blanco
-- Filtrado de comentarios vacíos
+- Conversión a minúsculas.
+- Eliminación de caracteres especiales.
+- Limpieza de espacios en blanco.
+- Filtrado de comentarios vacíos.
 
 ### Fuente de Datos
 
