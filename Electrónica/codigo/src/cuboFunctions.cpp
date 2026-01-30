@@ -53,7 +53,7 @@ int determineCubeSide(float ax, float ay, float az) {
 
 boolean connectWiFi(){
   //wifiMulti.addAP("WifiCube", "M3d14L4b2024_");
-  //wifiMulti.addAP("MikroTik-B87EBD", "medialab2019");
+  wifiMulti.addAP("MediaLab guest", "medialab2019");
 
   // Busca las redes WiFi almacenadas en la memoria no volátil para conectarse a alguna de ellas, cuando lo consigue imprime la dirección IP 
   for (int i = 1; i <= 5; i++) {

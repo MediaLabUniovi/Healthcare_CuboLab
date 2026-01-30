@@ -92,7 +92,7 @@
     <div class="container">
         <img src='/image' width='200' style="display: block; margin: 0 auto;"> <!-- Centrar la imagen -->
         <h1>Seleccionar Red WiFi</h1>
-        <form action="/save" method="post">
+        <form action="/configwifi" method="post">
             <select name="ssid" id="net" class="wifi-list">
                 {networks}
             </select>
@@ -105,11 +105,8 @@
     <div class="container">
       <h2>Datos:</h2>
       <p>Dipositivo Mac: {MAC}</p>
-      <p>WiFi 1: {ssid1}</p>
-      <p>WiFi 2: {ssid2}</p>
-      <p>WiFi 3: {ssid3}</p>
-      <p>WiFi 4: {ssid4}</p>
-      <p>WiFi 5: {ssid5}</p>
+      <h3>Redes WiFi Guardadas:</h3>
+      {wifilist}
       <form action="/calibration" method="get">
         <button type="submit">Calibrar Cubo</button>
       </form>

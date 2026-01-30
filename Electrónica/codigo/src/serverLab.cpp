@@ -40,6 +40,8 @@ void createServer(){
 
     // Iniciar el servidor HTTP
     server.on("/wifi", handleAddWifi);
+    server.on("/configwifi", handleConfigWiFi);
+    server.on("/deletewifi", handleDeleteWiFi);
     server.on("/calibration", handleCalibrate);
     server.on("/", handleAddWifi);
     server.begin();
@@ -47,6 +49,139 @@ void createServer(){
 
     
     scanNetworks();
+}
+
+
+void handleConfigWiFi() {
+    // Si es GET, servir la página HTML
+    if (server.method() == HTTP_GET) {
+        String html = "";
+        
+        // Leer el archivo index.html desde LittleFS
+        File file = LittleFS.open("/index.html", "r");
+        if (!file) {
+            server.send(404, "text/plain", "No se encontró index.html");
+            return;
+        }
+        html = file.readString();
+        file.close();
+        
+        // Reemplazar {networks} con opciones del select
+        String networks = "";
+        int n = WiFi.scanNetworks();
+        for (int i = 0; i < n; i++) {
+            networks += "<option value='" + WiFi.SSID(i) + "'>" + WiFi.SSID(i) + "</option>";
+        }
+        html.replace("{networks}", networks);
+        
+        // Reemplazar {MAC}
+        html.replace("{MAC}", macStr);
+        
+        // Reemplazar WiFi guardadas con botones de eliminar
+        String wifiList = "";
+        for (int i = 1; i <= 5; i++) {
+            String key = "ssid" + String(i);
+            String ssid = preferences.getString(key.c_str(), "");
+            if (ssid.length() > 0) {
+                wifiList += "<div style='display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background-color: #f0f0f0; border-radius: 5px;'>";
+                wifiList += "<span>" + ssid + "</span>";
+                wifiList += "<form action='/deletewifi' method='post' style='margin: 0;'>";
+                wifiList += "<input type='hidden' name='id' value='" + String(i) + "'>";
+                wifiList += "<button type='submit' style='background-color: #ff4444; padding: 5px 10px; color: white; border: none; border-radius: 3px; cursor: pointer;'>Eliminar</button>";
+                wifiList += "</form>";
+                wifiList += "</div>";
+            }
+        }
+        html.replace("{wifilist}", wifiList);
+        
+        server.send(200, "text/html", html);
+    }
+    // Si es POST, guardar la nueva WiFi
+    else if (server.method() == HTTP_POST) {
+        String ssid = server.arg("ssid");
+        String password = server.arg("password");
+
+        Serial.println("WiFi Añadida");
+        Serial.println(ssid);
+        Serial.println(password);
+
+        // Verificar si los parámetros ssid y password no están vacíos
+        if (ssid.length() == 0 || password.length() == 0) {
+            server.send(400, "text/plain", "Error: ssid o password vacíos.");
+            return;
+        }
+
+        // Recuperar el valor actual del contador, por defecto 1
+        int counter = preferences.getInt("counter", 1);
+        Serial.println(counter);
+
+        // Si el contador llega a 5, reiniciar a 1
+        if (counter >= 5) {
+            counter = 1;
+        } else {
+            counter++; // Incrementar el contador
+        }
+
+        // Crear las claves para el ssid y el password basadas en el contador
+        String ssidKey = "ssid" + String(counter);
+        String passKey = "pass" + String(counter);
+        
+        // Guardar el ssid y el password
+        bool ssidSaved = preferences.putString(ssidKey.c_str(), ssid);
+        bool passSaved = preferences.putString(passKey.c_str(), password);
+
+        // Verificar si ambos valores se guardaron correctamente
+        if (!ssidSaved || !passSaved) {
+            server.send(500, "text/plain", "Error saving ssid or password.");
+            return;
+        }
+
+        // Convertir los SSID y contraseñas a const char*
+        const char* ssidChar = ssid.c_str();
+        const char* passwordChar = password.c_str();
+
+        // Agregar la red WiFi con su contraseña
+        wifiMulti.addAP(ssidChar, passwordChar);
+
+        // Guardar el nuevo valor del contador
+        preferences.putInt("counter", counter);
+
+        // Enviar un código de éxito 200 OK
+        server.send(200, "text/plain", "WiFi credentials saved successfully.");
+    }
+}
+
+
+void handleDeleteWiFi() {
+    // Capturar el id de la WiFi a eliminar
+    String id = server.arg("id");
+    
+    if (id.length() == 0) {
+        server.send(400, "text/plain", "Error: id faltante.");
+        return;
+    }
+    
+    int wifiId = id.toInt();
+    
+    // Verificar que el id esté en el rango válido (1-5)
+    if (wifiId < 1 || wifiId > 5) {
+        server.send(400, "text/plain", "Error: id inválido.");
+        return;
+    }
+    
+    // Crear las claves para el ssid y el password
+    String ssidKey = "ssid" + String(wifiId);
+    String passKey = "pass" + String(wifiId);
+    
+    // Eliminar del almacenamiento de preferences
+    preferences.remove(ssidKey.c_str());
+    preferences.remove(passKey.c_str());
+    
+    Serial.println("WiFi eliminada: " + ssidKey);
+    
+    // Redirigir de vuelta a /configwifi
+    server.sendHeader("Location", "/configwifi");
+    server.send(302, "text/plain", "");
 }
 
 

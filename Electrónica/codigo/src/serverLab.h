@@ -5,6 +5,8 @@
 
 void createServer();
 void handleAddWifi();
+void handleConfigWiFi();
+void handleDeleteWiFi();
 void handleCalibrate();
 
 // Declaration of global variables
