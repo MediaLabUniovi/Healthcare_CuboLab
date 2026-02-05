@@ -6,6 +6,40 @@ String macStr;     // Define it here without extern
 
 int calibrationSide = 0;
 
+// Devuelve el Content-Type según la extensión del archivo
+String getContentType(const String& filename) {
+  if (filename.endsWith(".htm") || filename.endsWith(".html")) return "text/html";
+  if (filename.endsWith(".css")) return "text/css";
+  if (filename.endsWith(".js")) return "application/javascript";
+  if (filename.endsWith(".png")) return "image/png";
+  if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")) return "image/jpeg";
+  if (filename.endsWith(".gif")) return "image/gif";
+  if (filename.endsWith(".ico")) return "image/x-icon";
+  if (filename.endsWith(".svg")) return "image/svg+xml";
+  if (filename.endsWith(".json")) return "application/json";
+  return "text/plain";
+}
+
+// Handler para servir archivos desde LittleFS cuando no hay otra ruta registrada
+void handleFile() {
+  String uri = server.uri();
+  String path = uri;
+  if (path == "/") path = "/index.html";
+
+  if (LittleFS.exists(path)) {
+    File file = LittleFS.open(path, "r");
+    if (!file) {
+      server.send(500, "text/plain", "Error opening file.");
+      return;
+    }
+    String contentType = getContentType(path);
+    server.streamFile(file, contentType.c_str());
+    file.close();
+  } else {
+    server.send(404, "text/plain", "Not found");
+  }
+}
+
 
 void createServer(){
     byte mac[6];
@@ -44,6 +78,8 @@ void createServer(){
     server.on("/deletewifi", handleDeleteWiFi);
     server.on("/calibration", handleCalibrate);
     server.on("/", handleAddWifi);
+    // Servir archivos estáticos desde LittleFS si no hay otra ruta
+    server.onNotFound(handleFile);
     server.begin();
     Serial.println("Servidor HTTP iniciado");
 
