@@ -12,7 +12,7 @@ void createServer(){
     WiFi.macAddress(mac);
     
    // Construcción manual de la dirección MAC con ceros iniciales
-    String macStr = "";
+    macStr = "";
     for (int i = 0; i < 6; i++) {
         if (mac[i] < 0x10) {
             macStr += "0"; // Agregar un cero inicial si es menor a 0x10
