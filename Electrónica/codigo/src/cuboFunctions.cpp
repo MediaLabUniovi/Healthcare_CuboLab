@@ -1,4 +1,5 @@
 #include "cuboFunctions.h"
+#include <DFRobotDFPlayerMini.h>
 
 boolean networksAvailable = false;
 String networks = "";
@@ -9,8 +10,72 @@ float ax_values[6];  // Para almacenar ax de cada lado
 float ay_values[6];  // Para almacenar ay de cada lado
 float az_values[6];  // Para almacenar az de cada lado
 
-int minBatt = 2630; // Valor mínimo de la batería con divisor de 0.35: 5,95V
-int maxBatt = 3680; // Valor mínimo de la batería con divisor de 0.35: 8,2V
+int minBatt = 5950; // mV de batería mínima
+int maxBatt = 8200; // mV de batería máxima
+
+HardwareSerial dfPlayerSerial(1);
+DFRobotDFPlayerMini dfPlayer;
+bool dfPlayerPowered = false;
+bool dfPlayerReady = false;
+
+bool isChargingActive() {
+  return digitalRead(CHARGE_PIN) == CHARGE_ACTIVE_LEVEL;
+}
+
+void dfPlayerPowerOn() {
+  if (dfPlayerPowered) {
+    return;
+  }
+
+  pinMode(DFPLAYER_ENABLE_PIN, OUTPUT);
+  digitalWrite(DFPLAYER_ENABLE_PIN, HIGH);
+  dfPlayerPowered = true;
+  delay(DFPLAYER_POWER_STABILIZE_MS);
+}
+
+void dfPlayerPowerOff() {
+  if (!dfPlayerPowered) {
+    return;
+  }
+
+  dfPlayerReady = false;
+  dfPlayerSerial.end();
+  digitalWrite(DFPLAYER_ENABLE_PIN, LOW);
+  dfPlayerPowered = false;
+}
+
+bool initDfPlayer() {
+  if (dfPlayerReady) {
+    return true;
+  }
+
+  dfPlayerPowerOn();
+  dfPlayerSerial.begin(9600, SERIAL_8N1, DFPLAYER_UART_RX_PIN, DFPLAYER_UART_TX_PIN);
+
+  for (int attempt = 1; attempt <= DFPLAYER_INIT_RETRIES; attempt++) {
+    if (dfPlayer.begin(dfPlayerSerial, true, true)) {
+      dfPlayerReady = true;
+      dfPlayer.volume(22);
+      Serial.println("DFPlayer inicializado correctamente.");
+      return true;
+    }
+
+    Serial.printf("Fallo al inicializar DFPlayer (intento %d/%d).\n", attempt, DFPLAYER_INIT_RETRIES);
+    delay(150);
+  }
+
+  Serial.println("DFPlayer no disponible. Se continúa sin audio.");
+  dfPlayerReady = false;
+  return false;
+}
+
+void playEventTrack(uint16_t trackId) {
+  if (!dfPlayerReady && !initDfPlayer()) {
+    return;
+  }
+
+  dfPlayer.playMp3Folder(trackId);
+}
 
 void getLimits() {
   /* Recuperar los valores de los ejes x, y , z de la memoria no volatil para cada lado del cubo después de un reseteo */
@@ -103,22 +168,17 @@ boolean connectWiFi(){
     // To-Do: Realiza alguna acción si no se puede conectar después de 10 intentos
     Serial.println("No se pudo conectar a la red WiFi después de 10 intentos.");
 
-    analogWrite(led_r, 0);
-    tone(BUZZER_PIN, 440, 300);
+    // Hardware nuevo sin LEDs locales: se mantiene solo feedback por audio.
+    playEventTrack(TRACK_EVENT_WIFI_ERROR);
     delayLab(300);
-    analogWrite(led_r, 255);
     delayLab(300);
 
-    analogWrite(led_r, 0);
-    tone(BUZZER_PIN, 440, 300);
+    playEventTrack(TRACK_EVENT_WIFI_ERROR);
     delayLab(500);
-    analogWrite(led_r, 255);
     delayLab(500);
 
-    analogWrite(led_r, 0);
-    tone(BUZZER_PIN, 220, 600);
+    playEventTrack(TRACK_EVENT_WIFI_ERROR);
     delayLab(1000);
-    analogWrite(led_r, 255);
     delayLab(500);
 
 
@@ -129,10 +189,7 @@ boolean connectWiFi(){
 }
 
 void ledsOff(){
-  // La lógica de los leds está invertida
-    analogWrite(led_r, 255);
-    analogWrite(led_g, 255);
-    analogWrite(led_b, 255);
+  // Hardware actual sin LEDs en el dispositivo principal.
 }
 
 void delayLab(long wait){
@@ -142,77 +199,54 @@ void delayLab(long wait){
 }
 
 void sendHMI(){
-  // Función para indicar que se ha detectado un movimiento
-    ledsOff();
-    analogWrite(led_g, 0);
-    tone(BUZZER_PIN, 880, 300);
+  // En arquitectura de doble micro, la interfaz visual vive en la base.
+  // Aquí dejamos solo señal acústica local opcional.
+  playEventTrack(TRACK_EVENT_MOVEMENT);
 }
 
 
 void configHMI(){
-  // Función para indicar que se está configurando el cubo
-    ledsOff();
-    analogWrite(led_b, 255);
-    analogWrite(led_g, 255);
-    analogWrite(led_r, 0);
-    delayLab(500);
-    analogWrite(led_g, 0);
-    analogWrite(led_b, 255);
-    analogWrite(led_r, 255);
-    delayLab(500);
+  // Interfaz local desactivada: la base con OLED mostrará el estado de configuración.
 }
 
 void chargingHMI(){
-  // Función para indicar que se está cargando el cubo
-    if (getBattery()==100){
-      analogWrite(led_g, 0);
-    } else{
-    ledsOff();
-    for (int brillo = 0; brillo <= 255; brillo++) {
-    analogWrite(led_g, brillo);
-    delayLab(10);
-    }
-
-    for (int brillo = 255; brillo >= 0; brillo--) {
-    analogWrite(led_g, brillo);
-    delayLab(10);
-    }
-    ledsOff();
-  }
+  // Interfaz local desactivada: la base con OLED mostrará el estado de carga.
 }
 
 void testLowBattery(){
-  // Función para probar el estado de la batería
-  if(lowBattery){
-    analogWrite(led_r, 0);
-  }
-  else{
-    analogWrite(led_r, 255);
-  }
+  // Sin LED local en esta revisión de hardware.
 }
 
 int getBattery(){
   // Leer el valor de la batería
-  int batt = analogRead(34);
+  int adcRaw = analogRead(BATTERY_ADC_PIN);
+  float adcVoltage = (adcRaw * ADC_REF_VOLTAGE) / ADC_MAX_READING;
+  float batteryVoltage = adcVoltage * BATTERY_DIVIDER_RATIO * BATTERY_CALIBRATION_FACTOR;
+
+  float batt = (batteryVoltage - BATTERY_VOLTAGE_MIN) * 100.0f / (BATTERY_VOLTAGE_MAX - BATTERY_VOLTAGE_MIN);
+
   Serial.print("Battery Read: ");
-  Serial.println(batt);
-  if (batt<minBatt){batt = 0;}
-  else{
-     batt = batt-minBatt;
+  Serial.println(adcRaw);
+  Serial.print("Battery Voltage: ");
+  Serial.println(batteryVoltage, 3);
+
+  if (batt < 0) {
+    batt = 0;
   }
-  batt = batt * 100 / (maxBatt-minBatt);
-  if (batt>100){batt = 100;}
-  return batt;
+  if (batt > 100) {
+    batt = 100;
+  }
+
+  return (int)batt;
 }
 
 void goToSleep(){
     // Función para poner el dispositivo en modo de bajo consumo
+  dfPlayerPowerOff();
+
     if(lowBattery){
       Serial.println("Low Battery");
-      analogWrite(led_r, 0);
       delay(500);
-      gpio_hold_en(GPIO_NUM_25);  // GPIO de led_r
-      gpio_deep_sleep_hold_en();  // Habilitar GPIO hold para deep sleep
 
     }
 

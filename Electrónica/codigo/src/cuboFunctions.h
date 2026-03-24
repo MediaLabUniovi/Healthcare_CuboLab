@@ -12,6 +12,12 @@ extern float az_values[6];  // Para almacenar az de cada lado
 extern int minBatt;
 extern int maxBatt;
 
+bool isChargingActive();
+void dfPlayerPowerOn();
+void dfPlayerPowerOff();
+bool initDfPlayer();
+void playEventTrack(uint16_t trackId);
+
 void getLimits();
 int determineCubeSide(float ax, float ay, float az);
 boolean connectWiFi();
