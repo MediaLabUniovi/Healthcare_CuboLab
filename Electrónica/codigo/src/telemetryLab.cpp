@@ -1,4 +1,14 @@
 #include "telemetryLab.h"
+#include "dfPlayerLab.h"
+
+namespace {
+uint16_t trackForSide(int side) {
+  if (side < 0 || side > 5) {
+    return TRACK_EVENT_TELEMETRY_OK;
+  }
+  return (uint16_t)(side + 1);
+}
+}  // namespace
 
 bool sendTelemetryForSide(HTTPClient& http, bool modoDemo, int side, int battery) {
   if (!connectWiFi()) {
@@ -18,6 +28,7 @@ bool sendTelemetryForSide(HTTPClient& http, bool modoDemo, int side, int battery
       String response = http.getString();
       Serial.println("POST realizado con éxito, código de respuesta: " + String(httpResponseCode));
       Serial.println("Respuesta: " + response);
+      playEventTrack(trackForSide(side));
     } else {
       Serial.println("Error en la solicitud POST, código de respuesta: " + String(httpResponseCode));
       http.end();
@@ -42,6 +53,7 @@ bool sendTelemetryForSide(HTTPClient& http, bool modoDemo, int side, int battery
     int httpResponseCode = http.GET();
     if (httpResponseCode == 200) {
       Serial.println("GET realizado con éxito, código de respuesta: " + String(httpResponseCode));
+      playEventTrack(trackForSide(side));
       success = true;
     } else {
       Serial.println("Error en la solicitud GET, código de respuesta: " + String(httpResponseCode));

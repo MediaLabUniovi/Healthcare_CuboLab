@@ -13,10 +13,7 @@ extern int minBatt;
 extern int maxBatt;
 
 bool isChargingActive();
-void dfPlayerPowerOn();
-void dfPlayerPowerOff();
-bool initDfPlayer();
-void playEventTrack(uint16_t trackId);
+bool isConfigButtonPressed();
 
 void getLimits();
 int determineCubeSide(float ax, float ay, float az);

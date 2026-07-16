@@ -29,14 +29,18 @@ extern Adafruit_MPU6050 mpu;
 
 
 // DFPlayer + alimentación con TPS61023
+#define ENABLE_DFPLAYER 1
 #define DFPLAYER_ENABLE_PIN 17
-#define DFPLAYER_UART_RX_PIN 27  // RX del ESP32 (conectar a TX del DFPlayer)
-#define DFPLAYER_UART_TX_PIN 25  // TX del ESP32 (conectar a RX del DFPlayer)
-#define DFPLAYER_POWER_STABILIZE_MS 250
+#define DFPLAYER_UART_RX_PIN 27  // TX del ESP32 (conectar a RX del DFPlayer)
+#define DFPLAYER_UART_TX_PIN 25  // RX del ESP32 (conectar a TX del DFPlayer)
+#define DFPLAYER_POWER_STABILIZE_MS 4000
 #define DFPLAYER_INIT_RETRIES 3
+#define DFPLAYER_AUTO_POWER_OFF_MS 60000
+#define DFPLAYER_SLEEP_WAIT_MS 10000
 
 // Pistas MP3 para eventos (carpeta /mp3)
 #define TRACK_EVENT_MOVEMENT 1
+#define TRACK_EVENT_TELEMETRY_OK 1
 #define TRACK_EVENT_WIFI_ERROR 2
 
 // UART con microcontrolador externo.
@@ -55,7 +59,7 @@ extern Adafruit_MPU6050 mpu;
 // I2C MPU6050
 #define MPU_SDA_PIN 22
 #define MPU_SCL_PIN 21
-#define MPU_INT_PIN 5
+#define MPU_INT_PIN 14
 
 // Batería / carga
 #define BATTERY_ADC_PIN 34
@@ -63,10 +67,14 @@ extern Adafruit_MPU6050 mpu;
 #define CHARGE_ACTIVE_LEVEL HIGH
 #define CHARGE_INACTIVE_LEVEL LOW
 
+// Botón de configuración (cerrado a masa)
+#define CONFIG_BUTTON_PIN 33
+#define CONFIG_BUTTON_ACTIVE_LEVEL LOW
+
 // Conversión ADC -> voltaje real de batería (divisor 1:2)
 #define ADC_REF_VOLTAGE 3.3f
 #define ADC_MAX_READING 4095.0f
 #define BATTERY_DIVIDER_RATIO 2.0f
 #define BATTERY_CALIBRATION_FACTOR 1.0f
-#define BATTERY_VOLTAGE_MIN 5.95f
-#define BATTERY_VOLTAGE_MAX 8.2f
+#define BATTERY_VOLTAGE_MIN 3.30f
+#define BATTERY_VOLTAGE_MAX 4.20f

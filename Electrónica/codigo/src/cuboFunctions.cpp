@@ -1,5 +1,6 @@
 #include "cuboFunctions.h"
-#include <DFRobotDFPlayerMini.h>
+#include "dfPlayerLab.h"
+#include <driver/rtc_io.h>
 
 boolean networksAvailable = false;
 String networks = "";
@@ -13,68 +14,12 @@ float az_values[6];  // Para almacenar az de cada lado
 int minBatt = 5950; // mV de batería mínima
 int maxBatt = 8200; // mV de batería máxima
 
-HardwareSerial dfPlayerSerial(1);
-DFRobotDFPlayerMini dfPlayer;
-bool dfPlayerPowered = false;
-bool dfPlayerReady = false;
-
 bool isChargingActive() {
   return digitalRead(CHARGE_PIN) == CHARGE_ACTIVE_LEVEL;
 }
 
-void dfPlayerPowerOn() {
-  if (dfPlayerPowered) {
-    return;
-  }
-
-  pinMode(DFPLAYER_ENABLE_PIN, OUTPUT);
-  digitalWrite(DFPLAYER_ENABLE_PIN, HIGH);
-  dfPlayerPowered = true;
-  delay(DFPLAYER_POWER_STABILIZE_MS);
-}
-
-void dfPlayerPowerOff() {
-  if (!dfPlayerPowered) {
-    return;
-  }
-
-  dfPlayerReady = false;
-  dfPlayerSerial.end();
-  digitalWrite(DFPLAYER_ENABLE_PIN, LOW);
-  dfPlayerPowered = false;
-}
-
-bool initDfPlayer() {
-  if (dfPlayerReady) {
-    return true;
-  }
-
-  dfPlayerPowerOn();
-  dfPlayerSerial.begin(9600, SERIAL_8N1, DFPLAYER_UART_RX_PIN, DFPLAYER_UART_TX_PIN);
-
-  for (int attempt = 1; attempt <= DFPLAYER_INIT_RETRIES; attempt++) {
-    if (dfPlayer.begin(dfPlayerSerial, true, true)) {
-      dfPlayerReady = true;
-      dfPlayer.volume(22);
-      Serial.println("DFPlayer inicializado correctamente.");
-      return true;
-    }
-
-    Serial.printf("Fallo al inicializar DFPlayer (intento %d/%d).\n", attempt, DFPLAYER_INIT_RETRIES);
-    delay(150);
-  }
-
-  Serial.println("DFPlayer no disponible. Se continúa sin audio.");
-  dfPlayerReady = false;
-  return false;
-}
-
-void playEventTrack(uint16_t trackId) {
-  if (!dfPlayerReady && !initDfPlayer()) {
-    return;
-  }
-
-  dfPlayer.playMp3Folder(trackId);
+bool isConfigButtonPressed() {
+  return digitalRead(CONFIG_BUTTON_PIN) == CONFIG_BUTTON_ACTIVE_LEVEL;
 }
 
 void getLimits() {
@@ -200,8 +145,7 @@ void delayLab(long wait){
 
 void sendHMI(){
   // En arquitectura de doble micro, la interfaz visual vive en la base.
-  // Aquí dejamos solo señal acústica local opcional.
-  playEventTrack(TRACK_EVENT_MOVEMENT);
+  // El audio queda reservado para confirmación de servidor en telemetryLab.
 }
 
 
@@ -218,17 +162,32 @@ void testLowBattery(){
 }
 
 int getBattery(){
-  // Leer el valor de la batería
-  int adcRaw = analogRead(BATTERY_ADC_PIN);
-  float adcVoltage = (adcRaw * ADC_REF_VOLTAGE) / ADC_MAX_READING;
+  // Promediar lecturas para reducir ruido del ADC en deep-sleep wakeups.
+  const int kSamples = 16;
+  uint32_t rawAccum = 0;
+  uint32_t mvAccum = 0;
+
+  for (int i = 0; i < kSamples; i++) {
+    rawAccum += analogRead(BATTERY_ADC_PIN);
+    mvAccum += analogReadMilliVolts(BATTERY_ADC_PIN);
+  }
+
+  float adcRaw = rawAccum / (float)kSamples;
+  float adcVoltage = (mvAccum / (float)kSamples) / 1000.0f;
+
+  // Fallback si la calibracion por mV no estuviera disponible.
+  if (adcVoltage <= 0.01f) {
+    adcVoltage = (adcRaw * ADC_REF_VOLTAGE) / ADC_MAX_READING;
+  }
+
   float batteryVoltage = adcVoltage * BATTERY_DIVIDER_RATIO * BATTERY_CALIBRATION_FACTOR;
 
   float batt = (batteryVoltage - BATTERY_VOLTAGE_MIN) * 100.0f / (BATTERY_VOLTAGE_MAX - BATTERY_VOLTAGE_MIN);
 
-  Serial.print("Battery Read: ");
-  Serial.println(adcRaw);
+  /*Serial.print("Battery Read: ");
+  Serial.println((int)roundf(adcRaw));
   Serial.print("Battery Voltage: ");
-  Serial.println(batteryVoltage, 3);
+  Serial.println(batteryVoltage, 3);*/
 
   if (batt < 0) {
     batt = 0;
@@ -241,7 +200,6 @@ int getBattery(){
 }
 
 void goToSleep(){
-    // Función para poner el dispositivo en modo de bajo consumo
   dfPlayerPowerOff();
 
     if(lowBattery){
@@ -253,8 +211,11 @@ void goToSleep(){
     // Entrar en modo deep sleep para ahorrar batería
     Serial.println("Entrando en modo de bajo consumo.");
 
-    // Habilitar desperetar por interrupción en movimiento e interrupción de carga
-    esp_sleep_enable_ext1_wakeup((1ULL << MPU_INT_PIN) | (1ULL << CHARGE_PIN), ESP_EXT1_WAKEUP_ANY_HIGH); 
+    // Wake por movimiento/carga (alto) y por botón de configuración (bajo).
+    esp_sleep_enable_ext1_wakeup((1ULL << MPU_INT_PIN) | (1ULL << CHARGE_PIN), ESP_EXT1_WAKEUP_ANY_HIGH);
+    rtc_gpio_pullup_en((gpio_num_t)CONFIG_BUTTON_PIN);
+    rtc_gpio_pulldown_dis((gpio_num_t)CONFIG_BUTTON_PIN);
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)CONFIG_BUTTON_PIN, 0);
     esp_deep_sleep_start();  // Entrar en modo deep sleep
 }
 

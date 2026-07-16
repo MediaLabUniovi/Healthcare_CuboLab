@@ -13,9 +13,14 @@ unsigned long chargeLastEdgeMs = 0;
 String dockRxBuffer;
 unsigned long lastDockRxMs = 0;
 unsigned long lastDockPingMs = 0;
+unsigned long lastHelloAttemptMs = 0;
+unsigned long helloCycleStartMs = 0;
+int helloAttemptsInCycle = 0;
+bool handshakeStatusSent = false;
 
 int currentBattery = 0;
 bool currentLowBattery = false;
+int currentSide = 0;
 
 void sendDockLine(const String& line) {
   if (dockSerial == nullptr) {
@@ -36,6 +41,8 @@ void processDockLine(const String& line) {
 
   if (line == "HELLO_ACK") {
     dockConnected = true;
+    helloAttemptsInCycle = 0;
+    handshakeStatusSent = false;
     return;
   }
 
@@ -85,12 +92,19 @@ void dockCommBegin(HardwareSerial& serialPort) {
   chargeStableState = chargeRawState;
   chargeLastEdgeMs = millis();
   chargingDetected = chargeStableState;
+  lastHelloAttemptMs = 0;
+  helloCycleStartMs = 0;
+  helloAttemptsInCycle = 0;
+  handshakeStatusSent = false;
 }
 
-void dockCommSetState(bool charging, int batteryLevel, bool lowBatteryState) {
+void dockCommSetState(bool charging, int batteryLevel, bool lowBatteryState, int sideIndex) {
   chargingDetected = charging;
   currentBattery = batteryLevel;
   currentLowBattery = lowBatteryState;
+  if (sideIndex >= 0 && sideIndex <= 5) {
+    currentSide = sideIndex;
+  }
 }
 
 bool dockCommIsChargingDetected() {
@@ -117,20 +131,30 @@ bool dockCommUpdateDebouncedChargeState() {
 }
 
 bool dockCommAttemptHandshake() {
-  for (int attempt = 1; attempt <= DOCK_HANDSHAKE_RETRIES; attempt++) {
-    sendDockLine("HELLO");
+  processDockSerial();
 
-    unsigned long deadline = millis() + DOCK_HELLO_TIMEOUT_MS;
-    while ((long)(deadline - millis()) > 0) {
-      processDockSerial();
-      if (dockConnected) {
-        dockCommSendStatus("HANDSHAKE_OK");
-        return true;
-      }
-      delay(5);
+  if (dockConnected || !chargingDetected) {
+    return dockConnected;
+  }
+
+  unsigned long now = millis();
+  if (helloAttemptsInCycle == 0) {
+    helloCycleStartMs = now;
+  }
+
+  if (helloAttemptsInCycle >= DOCK_HANDSHAKE_RETRIES) {
+    unsigned long cycleWindowMs = (DOCK_HELLO_TIMEOUT_MS * DOCK_HANDSHAKE_RETRIES) + 300;
+    if ((now - helloCycleStartMs) >= cycleWindowMs) {
+      helloAttemptsInCycle = 0;
+      helloCycleStartMs = now;
     }
+    return false;
+  }
 
-    Serial.printf("[DOCK] HELLO timeout (%d/%d).\n", attempt, DOCK_HANDSHAKE_RETRIES);
+  if (helloAttemptsInCycle == 0 || (now - lastHelloAttemptMs) >= DOCK_HELLO_TIMEOUT_MS) {
+    sendDockLine("HELLO");
+    lastHelloAttemptMs = now;
+    helloAttemptsInCycle++;
   }
 
   return false;
@@ -140,7 +164,15 @@ void dockCommMaintainLink() {
   processDockSerial();
 
   if (!dockConnected) {
+    if (chargingDetected) {
+      dockCommAttemptHandshake();
+    }
     return;
+  }
+
+  if (!handshakeStatusSent) {
+    dockCommSendStatus("HANDSHAKE_OK");
+    handshakeStatusSent = true;
   }
 
   if (millis() - lastDockPingMs >= DOCK_PING_INTERVAL_MS) {
@@ -151,6 +183,8 @@ void dockCommMaintainLink() {
   // Si no llega nada de la base durante mucho tiempo, asumimos enlace caído.
   if (millis() - lastDockRxMs > (DOCK_PING_INTERVAL_MS + DOCK_ACK_TIMEOUT_MS)) {
     dockConnected = false;
+    helloAttemptsInCycle = 0;
+    handshakeStatusSent = false;
     Serial.println("[DOCK] Enlace perdido.");
   }
 }
@@ -160,6 +194,7 @@ void dockCommSendStatus(const char* phase) {
                ";charging=" + String(chargingDetected ? 1 : 0) +
                ";battery=" + String(currentBattery) +
                ";low=" + String(currentLowBattery ? 1 : 0) +
+               ";side=" + String(currentSide) +
                ";dock=" + String(dockConnected ? 1 : 0);
   sendDockLine(msg);
 }

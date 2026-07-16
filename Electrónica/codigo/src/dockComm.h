@@ -5,7 +5,7 @@
 #include "configuration.h"
 
 void dockCommBegin(HardwareSerial& serialPort);
-void dockCommSetState(bool charging, int batteryLevel, bool lowBatteryState);
+void dockCommSetState(bool charging, int batteryLevel, bool lowBatteryState, int sideIndex);
 
 bool dockCommIsChargingDetected();
 bool dockCommIsConnected();
