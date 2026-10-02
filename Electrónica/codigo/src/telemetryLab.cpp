@@ -40,7 +40,7 @@ bool sendTelemetryForSide(HTTPClient& http, bool modoDemo, int side, int battery
   }
 
   String macAddress = WiFi.macAddress();
-  String url = "https://www.unioviedo.es/medialab/datos_cube.php";
+  String url = "https://cubolab.medialab-uniovi.es/datos_cube.php";
   url += "?e=" + String(side) + "&m=%27" + macAddress + "%27&b=" + String(battery);
 
   Serial.println(url);
