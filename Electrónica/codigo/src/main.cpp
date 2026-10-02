@@ -1,14 +1,19 @@
 #include <Arduino.h>
+#include <esp_sleep.h>
 #include "configuration.h"
-
+#include "dfPlayerLab.h"
+#include "dockComm.h"
+#include "motionLab.h"
+#include "telemetryLab.h"
 
 Adafruit_MPU6050 mpu;
+HardwareSerial auxUart(2);
 
 const float accelThreshold = 0.05;  // Umbral para detectar movimiento en g
 const float gyroThreshold = 0.1;    // Umbral para detectar rotación en rad/s
 
 // Opciones de configuración del MPU6050
-const float motion = 1; 
+const float motion = 1;
 const float motionDuration = 1.0;
 
 boolean modoDemo = false;
@@ -18,9 +23,9 @@ boolean calibration = true;
 
 HTTPClient http;
 
-int chargingState; // Estado de carga del dispositivo (0: no cargando, 1: cargando, 2: cargado)
-WiFiMulti wifiMulti; // Instancia de WiFiMulti para conectarse a varias redes WiFi
-Preferences preferences;// Instancia de Preferences para almacenar los valores de los ejes en memoria no volátil
+int chargingState = 0;  // Estado de carga del dispositivo (0: no cargando, 1: cargando, 2: cargado)
+WiFiMulti wifiMulti;  // Instancia de WiFiMulti para conectarse a varias redes WiFi
+Preferences preferences;  // Instancia de Preferences para almacenar los valores de los ejes en memoria no volátil
 unsigned long startTime;
 
 int battery;
@@ -28,307 +33,301 @@ bool lowBattery = false;
 bool moving = true;
 
 bool configFirst = true;
+bool manualConfigRequested = false;
 
+enum BatteryRuntimeState {
+  BATTERY_RUNTIME_MONITORING = 0,
+  BATTERY_RUNTIME_WAITING_DFPLAYER_OFF = 1,
+};
+
+enum DockBridgeState {
+  DOCK_BRIDGE_WAIT_CHARGE = 0,
+  DOCK_BRIDGE_WAIT_SERVER_DFPLAYER = 1,
+  DOCK_BRIDGE_ACTIVE = 2,
+};
+
+BatteryRuntimeState batteryRuntimeState = BATTERY_RUNTIME_MONITORING;
+unsigned long dfPlayerWaitStartMs = 0;
+unsigned long lastDockChargingStatusMs = 0;
+const unsigned long DOCK_CHARGING_STATUS_INTERVAL_MS = 500;
+DockBridgeState dockBridgeState = DOCK_BRIDGE_WAIT_CHARGE;
+
+namespace {
+bool dockBridgeCanTx() {
+  return dockBridgeState == DOCK_BRIDGE_ACTIVE;
+}
+
+void dockBridgeUpdateByCharge(bool chargingDetected) {
+  if (!chargingDetected) {
+    dockBridgeState = DOCK_BRIDGE_WAIT_CHARGE;
+    return;
+  }
+
+  if (dockBridgeState == DOCK_BRIDGE_WAIT_CHARGE) {
+    dockBridgeState = DOCK_BRIDGE_ACTIVE;
+  }
+}
+
+void dockBridgeSendStatusIfAllowed(const char* phase, bool chargingDetected) {
+  if (!chargingDetected || !dockBridgeCanTx()) {
+    return;
+  }
+  dockCommSendStatus(phase);
+}
+
+void dockBridgeSendEventIfAllowed(const char* eventName, int value, bool chargingDetected) {
+  if (!chargingDetected || !dockBridgeCanTx()) {
+    return;
+  }
+  dockCommSendEvent(eventName, value);
+}
+
+void dockBridgeMaintainIfAllowed(bool chargingDetected) {
+  if (!chargingDetected || !dockBridgeCanTx()) {
+    return;
+  }
+  dockCommMaintainLink();
+}
+}  // namespace
 
 void setup() {
-    Serial.begin(115200);
-    if (!mpu.begin(0x68)) {
-        Serial.println("No se pudo encontrar un MPU6050.");
-        while (1) {
-            delay(10);
-        }
+  Serial.begin(115200);
+
+  #if ENABLE_DFPLAYER
+  pinMode(DFPLAYER_ENABLE_PIN, OUTPUT);
+  digitalWrite(DFPLAYER_ENABLE_PIN, LOW);
+  #endif
+
+  pinMode(MPU_INT_PIN, INPUT_PULLUP);
+  pinMode(CHARGE_PIN, INPUT);
+  pinMode(CONFIG_BUTTON_PIN, INPUT_PULLUP);
+  analogReadResolution(12);
+  analogSetPinAttenuation(BATTERY_ADC_PIN, ADC_11db);
+
+  Wire.begin(MPU_SDA_PIN, MPU_SCL_PIN);
+
+  auxUart.begin(AUX_UART_BAUDRATE, SERIAL_8N1, AUX_UART_RX_PIN, AUX_UART_TX_PIN);
+  Serial.printf("UART auxiliar configurada. RX=%d TX=%d\n", AUX_UART_RX_PIN, AUX_UART_TX_PIN);
+  dockCommBegin(auxUart);
+
+  if (AUX_UART_TX_PIN == 15 || AUX_UART_TX_PIN == 5 || AUX_UART_TX_PIN == 12) {
+    Serial.println("WARNING: El pin TX de la UART auxiliar usa un pin de arranque. Revisar cableado y niveles al boot.");
+  }
+  if (AUX_UART_RX_PIN == 15) {
+    Serial.println("WARNING: GPIO15 es pin sensible de arranque. Evitar pull-ups/pull-downs fuertes desde la base.");
+  }
+
+  if (!mpu.begin(0x68)) {
+    Serial.println("No se pudo encontrar un MPU6050.");
+    while (1) {
+      delay(10);
     }
-    mpu.setAccelerometerRange(MPU6050_RANGE_2_G);
-    mpu.setGyroRange(MPU6050_RANGE_250_DEG);
-    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+  }
 
-    Serial.println("MPU6050 inicializado correctamente.");
+  mpu.setAccelerometerRange(MPU6050_RANGE_2_G);
+  mpu.setGyroRange(MPU6050_RANGE_250_DEG);
+  mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
 
+  Serial.println("MPU6050 inicializado correctamente.");
 
-    pinMode(MPU_INT_PIN, INPUT_PULLUP);
-    pinMode(CHARGE_PIN, INPUT_PULLUP);
+  preferences.begin("MediaLab", false);
 
+  getLimits();  // Recuperar los valores de los ejes x, y, z para cada lado del cubo
 
-    preferences.begin("MediaLab", false);
+  Serial.print("MAC: ");
+  Serial.println(WiFi.macAddress());
 
-    getLimits(); // Recuperar los valores de los ejes x, y, z para cada lado del cubo
+  // Configurar el MPU6050 para activar la interrupción en movimiento
+  mpu.setMotionInterrupt(true);
+  mpu.setMotionDetectionThreshold(motion);
+  mpu.setMotionDetectionDuration(motionDuration);
 
-    Serial.print("MAC: ");
-    Serial.println(WiFi.macAddress());
-
-    // Configurar el MPU6050 para activar la interrupción en movimiento
-    mpu.setMotionInterrupt(true);
-    mpu.setMotionDetectionThreshold(motion);         
-    mpu.setMotionDetectionDuration(motionDuration);
-
-    if (analogRead(CHARGE_PIN)>1000){
-      // Función para indicar que se está cargando el cubo
-        Serial.println("Dispositivo despertado por voltaje positivo en el pin 33.");
-        chargingState = 1;
-        startTime = millis();
+  esp_sleep_wakeup_cause_t wakeCause = esp_sleep_get_wakeup_cause();
+  if (wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
+    uint64_t wakeMask = esp_sleep_get_ext1_wakeup_status();
+    if ((wakeMask & (1ULL << MPU_INT_PIN)) != 0) {
+      Serial.println("Wake por MPU INT: activando convertidor DFPlayer para calentamiento.");
+      dfPlayerPowerOn();
     }
+  }
 
-    battery = getBattery();
-    Serial.println(battery);
+  // Recuperar última cara conocida en NVS (actualizada por motionLab).
+  side = preferences.getInt("Side", 0);
+  Serial.printf("[SIDE] Última cara guardada: %d\n", side);
 
+  battery = getBattery();
+  Serial.println(battery);
 
-    if (battery<15){
-      lowBattery=true;
-      gpio_hold_dis(GPIO_NUM_25);   // Libera el GPIO
-      analogWrite(led_r, 0); //La lógica de los leds está invertida (Esto significa que para encender el led, el valor debe ser 0)
-    }
-    else{
-      gpio_hold_dis(GPIO_NUM_25);  
-      Serial.println("Battery ok");
-      lowBattery=false;
-      analogWrite(led_r, 255); //La lógica de los leds está invertida (Esto significa que para apagar el led, el valor debe ser 255)
-    }
+  lowBattery = battery < 15;
+  if (!lowBattery) {
+    Serial.println("Battery ok");
+    initDfPlayer();
+  }
+
+  bool chargingDetected = dockCommIsChargingDetected();
+  bool configButtonDetected = isConfigButtonPressed();
+  dockCommSetState(chargingDetected, battery, lowBattery, side);
+  dockBridgeUpdateByCharge(chargingDetected);
+
+  if (chargingDetected) {
+    // Carga detectada: no implica automaticamente que la UART con base esté conectada.
+    Serial.println("Dispositivo despertado por detección de carga en GPIO35.");
+    chargingState = 1;
+    startTime = millis();
+  }
+
+  if (configButtonDetected) {
+    Serial.println("Botón de configuración detectado en GPIO33.");
+    manualConfigRequested = true;
+    chargingState = 1;
+    startTime = millis();
+  }
+  dockBridgeSendStatusIfAllowed("BOOT", chargingDetected);
 }
 
 void loop() {
+  processDfPlayerTimers();
 
-    /* ------------------------------------------------ Estado: Fncionando con la batería ------------------------------------------------ */
-    if(chargingState == 0){
-    
-      /* ---------------------------------------------------------- MEDIDA SENSOR ---------------------------------------------------------- */
-      sensors_event_t accel, gyro, temp; // Instancia de la estructura de eventos para almacenar las lecturas del sensor
-      mpu.getEvent(&accel, &gyro, &temp);
+  bool previousCharging = dockCommIsChargingDetected();
+  bool chargingDetected = dockCommUpdateDebouncedChargeState();
+  dockBridgeUpdateByCharge(chargingDetected);
+  bool configButtonPressed = isConfigButtonPressed();
+  dockCommSetState(chargingDetected, battery, lowBattery, side);
 
-      //Convertir las lecturas
-      float ax = accel.acceleration.x;
-      float ay = accel.acceleration.y;
-      float az = accel.acceleration.z;
+  if (configButtonPressed && !manualConfigRequested) {
+    Serial.println("[CONFIG] Solicitud manual por botón GPIO33.");
+    manualConfigRequested = true;
+  }
 
-      float gx = gyro.gyro.x;
-      float gy = gyro.gyro.y;
-      float gz = gyro.gyro.z;
-
-      float A2 = sqrt(ax*ax + ay*ay + az*az);// Magnitud del vector de aceleración
-      float G2 = sqrt(gx*gx + gy*gy + gz*gz);// Magnitud del vector de velocidad angular
-      
-    
-      //Serial.println(G2);
-      
-      /* ---------- DETECCIÓN MOVIMIENTO ---------- */
-      if (G2 > 0.09){
-          if (!moving) {
-              moving = true;
-              Serial.println("Movimiento detectado.");
-          }
-      } else {
-          if (moving) {
-              int side = determineCubeSide(ax, ay, az);
-              if (side !=-1){ 
-
-                moving = false;
-                Serial.println("Movimiento detenido.");
-
-                int lastSide = preferences.getInt("Side", 0);
-                Serial.print("Side: ");
-                Serial.print(side);
-                Serial.print(" Last Side: ");
-                Serial.println(lastSide);
-
-                preferences.putInt("Side", side);
-
-                if (side != lastSide){
-
-                  sendHMI();
-
-                  if(connectWiFi()){
-
-                    if(modoDemo){
-
-                      String url = "http://85.31.236.104:3047/send-emotion";  // Cambia la URL a la de tu servidor
-
-                      // Especificar la URL del servidor
-                      http.begin(url);  
-
-                      // Configurar el tipo de contenido a enviar
-                      http.addHeader("Content-Type", "application/json");
-
-                      // Crear el cuerpo de la solicitud en formato JSON
-                      String postData = "{\"emotion\":\"" + String(side) + "\"}";
-
-                      // Enviar la solicitud POST
-                      int httpResponseCode = http.POST(postData);  
-
-                      // Comprobar el código de respuesta
-                      if (httpResponseCode > 0) {
-                        String response = http.getString();  // Obtener la respuesta del servidor
-                        Serial.println("POST realizado con éxito, código de respuesta: " + String(httpResponseCode));
-                        Serial.println("Respuesta: " + response);
-                      } else {
-                        Serial.println("Error en la solicitud POST, código de respuesta: " + String(httpResponseCode));
-                      }
-
-                      http.end();  // Finalizar la conexión
-                      
-                    }
-                    else{
-                      /* ---------- ENVÍO DE DATOS A SERVIDOR ----------*/
-                      String macAddress = WiFi.macAddress();
-
-          
-                      String url = "https://www.unioviedo.es/medialab/datos_cube.php";
-
-                      // Construir la URL con los parámetros en la cadena de consulta
-                      url += "?e=" + String(side) + "&m=%27" + macAddress + "%27&b=" + String(battery);
-
-                      Serial.println(url);
-                      boolean success = false;
-                      while(!success){
-                        http.setTimeout(30000); // Tiempo de espera en milisegundos
-
-                        http.begin(url);  // Iniciar la conexión
-
-                        http.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");  // O usa un User-Agent específico de un navegador
-
-                        // Enviar la solicitud GET
-                        int httpResponseCode = http.GET();  // Realizar la solicitud GET
-
-                        // Comprobar el código de respuesta
-                        if (httpResponseCode == 200) {
-                            Serial.println("GET realizado con éxito, código de respuesta: " + String(httpResponseCode));
-                            success = true;
-                        } else {
-                            Serial.println("Error en la solicitud GET, código de respuesta: " + String(httpResponseCode));
-                        }
-
-                        http.end();  // Finalizar la conexión
-                      }
-                      
-                      /* ---------- OBTENCIÓN HORA PARA OTA ---------- */
-                      struct tm timeinfo;
-
-                      configTime(0, 0, "hora.roa.es");
-                      if (!getLocalTime(&timeinfo))
-                      {
-                        Serial.println("Failed to obtain time");
-                                        }
-                      Serial.println("Hora configurada de hora.roa.es");
-
-                      String timezone = "CET-1CEST,M3.5.0/1,M10.5.0";
-                      setenv("TZ", timezone.c_str(), 1);
-                      tzset();
-
-                      int currentHour = timeinfo.tm_hour;
-                      int currentMinute = timeinfo.tm_min;
-
-                      // Imprimir la hora actual
-                      Serial.printf("Hora actual: %02d:%02d\n", currentHour, currentMinute);
-
-                      // Verificar si la hora está entre las 00:00 y las 10:00
-                      if (currentHour >= 2 && currentHour < 7) {
-                          Serial.println("La hora está entre las 00:00 y las 10:00. Iniciando actualización OTA...");
-                          //updateFirmware();  // Llamar a la función de actualización
-                      } else {
-                          Serial.println("No es la hora adecuada para la actualización.");
-                      }
-                    }
-                  }
-                }
-
-                goToSleep();// Modo DEEP_SLEEP, comienza en el setup en la próxima interrupción (IMU o Carga)
-
-              }
-          }
+  if (chargingDetected != previousCharging) {
+    if (chargingDetected) {
+      Serial.println("[CHARGE] Estado estable: cargando.");
+      chargingState = 1;
+      startTime = millis();
+      side = preferences.getInt("Side", side);
+      dockCommSetState(chargingDetected, battery, lowBattery, side);
+      dockBridgeState = DOCK_BRIDGE_ACTIVE;
+      dockBridgeSendEventIfAllowed("CHARGE_ON", 1, chargingDetected);
+      dockBridgeSendStatusIfAllowed("CHARGING", chargingDetected);
+      lastDockChargingStatusMs = millis();
+    } else {
+      Serial.println("[CHARGE] Estado estable: sin carga.");
+      if (!manualConfigRequested) {
+        chargingState = 2;
       }
-      
-
-      delay(10);  // Espera 10ms antes de la siguiente lectura
-    }
-
-    /* ------------------------------------------------ Estado: Cargando & Configuración ------------------------------------------------ */
-    else if(chargingState==1){
-      int vchargeValue = analogRead(CHARGE_PIN);
-
-      if(configFirst){
-        createServer();
-        configFirst = false;
-      }
-
-      if ((millis() - startTime < 300000) && vchargeValue > 1000) {
-          configHMI();
-          
-          server.handleClient();
-        } else {
-
-          WiFi.softAPdisconnect(true);  // Desconectar AP
-          chargingState=2;
-          
-        }
-    }
-
-    /* ------------------------------------------------ Estado: Después de carga o configuración ------------------------------------------------ */
-    else{
-      
-      chargingHMI();
-      int vchargeValue = analogRead(CHARGE_PIN);
-      if (vchargeValue <1000){  
-      
-        battery = getBattery();
-
-        ledsOff();
-        delay(500);
-
-        if (battery>75){
-          for (int i = 0; i<4; i++){
-            analogWrite(led_b, 255);
-            analogWrite(led_g, 0);
-            analogWrite(led_r, 255);
-            delayLab(500);
-            analogWrite(led_g, 255);
-            analogWrite(led_b, 255);
-            analogWrite(led_r, 255);
-            delayLab(500);
-          }
-          
-        }
-        else if (battery>50)
-        {
-          for (int i = 0; i<3; i++){
-            analogWrite(led_b, 255);
-            analogWrite(led_g, 0);
-            analogWrite(led_r, 255);
-            delayLab(500);
-            analogWrite(led_g, 255);
-            analogWrite(led_b, 255);
-            analogWrite(led_r, 255);
-            delayLab(500);
-          }
-        }
-        else if (battery>25)
-        {
-          for (int i = 0; i<2; i++){
-            analogWrite(led_b, 255);
-            analogWrite(led_g, 0);
-            analogWrite(led_r, 255);
-            delayLab(500);
-            analogWrite(led_g, 255);
-            analogWrite(led_b, 255);
-            analogWrite(led_r, 255);
-            delayLab(500);
-          }
-        }
-        else{
-            analogWrite(led_b, 255);
-            analogWrite(led_g, 255);
-            analogWrite(led_r, 0);
-            delayLab(500);
-            analogWrite(led_g, 255);
-            analogWrite(led_b, 255);
-            analogWrite(led_r, 255);
-            delayLab(500);
-
-          if (battery<15){
-            lowBattery=true;
-            analogWrite(led_r, 0);
-          }
-        }
-
-        goToSleep();  
-      } 
-      
+      dockBridgeState = DOCK_BRIDGE_WAIT_CHARGE;
+      dockBridgeSendEventIfAllowed("CHARGE_OFF", 0, chargingDetected);
+      dockBridgeSendStatusIfAllowed("UNDOCKED", chargingDetected);
     }
   }
+
+  dockBridgeMaintainIfAllowed(chargingDetected);
+
+  if (chargingState == 0 && manualConfigRequested) {
+    chargingState = 1;
+    startTime = millis();
+    dockBridgeSendEventIfAllowed("CONFIG_BTN", 1, chargingDetected);
+    dockBridgeSendStatusIfAllowed("CONFIG_BUTTON", chargingDetected);
+  }
+
+  /* ------------------------------------------------ Estado: Fncionando con la batería ------------------------------------------------ */
+  if (chargingState == 0) {
+      if (batteryRuntimeState == BATTERY_RUNTIME_WAITING_DFPLAYER_OFF) {
+        if (!isDfPlayerPowerOffPending()) {
+          batteryRuntimeState = BATTERY_RUNTIME_MONITORING;
+          goToSleep();
+          return;
+        }
+
+        if ((millis() - dfPlayerWaitStartMs) >= DFPLAYER_SLEEP_WAIT_MS) {
+          Serial.println("Timeout esperando apagado DFPlayer. Forzando apagado y sleep.");
+          dfPlayerPowerOff();
+          batteryRuntimeState = BATTERY_RUNTIME_MONITORING;
+          goToSleep();
+          return;
+        }
+
+        delay(10);
+        return;
+      }
+
+      int detectedSide = -1;
+      MotionCycleResult motionResult = processMotionCycle(mpu, preferences, moving, detectedSide);
+
+      if (motionResult != MOTION_NO_EVENT) {
+        if (motionResult == MOTION_SIDE_CHANGED) {
+          sendHMI();
+          side = detectedSide;
+          dockCommSetState(chargingDetected, battery, lowBattery, side);
+          dockBridgeState = DOCK_BRIDGE_WAIT_SERVER_DFPLAYER;
+
+          bool telemetryOk = sendTelemetryForSide(http, modoDemo, detectedSide, battery);
+          if (telemetryOk && isDfPlayerPowerOffPending()) {
+            Serial.println("[DOCK] Telemetría OK y DFPlayer activo. Se habilita enlace con base.");
+          } else if (!telemetryOk) {
+            Serial.println("[DOCK] Telemetría fallida. Se reanuda política UART por estado de carga.");
+          } else {
+            Serial.println("[DOCK] Telemetría OK pero DFPlayer no pendiente. Se reanuda política UART por estado de carga.");
+          }
+
+          dockBridgeState = chargingDetected ? DOCK_BRIDGE_ACTIVE : DOCK_BRIDGE_WAIT_CHARGE;
+          dockBridgeSendEventIfAllowed("SIDE_CHANGED", detectedSide, chargingDetected);
+          dockBridgeSendStatusIfAllowed("MOTION_DONE", chargingDetected);
+        }
+
+        // Si hay audio pendiente, esperamos su autoapagado antes de dormir.
+        if (isDfPlayerPowerOffPending()) {
+          batteryRuntimeState = BATTERY_RUNTIME_WAITING_DFPLAYER_OFF;
+          dfPlayerWaitStartMs = millis();
+          Serial.println("Esperando fin de ventana DFPlayer antes de dormir.");
+        } else {
+          goToSleep();
+        }
+      }
+
+
+      delay(10);  // Espera 10ms antes de la siguiente lectura
+  }
+
+  /* ------------------------------------------------ Estado: Cargando & Configuración ------------------------------------------------ */
+  else if (chargingState == 1) {
+    battery = getBattery();
+    lowBattery = battery < 15;
+
+    // Durante carga se reporta estado a la base para que la OLED muestre información.
+    dockCommSetState(chargingDetected, battery, lowBattery, side);
+    if (dockBridgeCanTx() &&
+        dockCommIsConnected() &&
+        (millis() - lastDockChargingStatusMs) >= DOCK_CHARGING_STATUS_INTERVAL_MS) {
+      dockBridgeSendStatusIfAllowed("CHARGING", chargingDetected);
+      lastDockChargingStatusMs = millis();
+    }
+
+    if (configFirst) {
+      createServer();
+      configFirst = false;
+    }
+
+    if ((millis() - startTime < 300000) && (chargingDetected || manualConfigRequested)) {
+      configHMI();
+      server.handleClient();
+    } else {
+
+      WiFi.softAPdisconnect(true);  // Desconectar AP
+      chargingState = 2;
+      manualConfigRequested = false;
+    }
+  }
+
+  /* ------------------------------------------------ Estado: Después de carga o configuración ------------------------------------------------ */
+  else {
+    // Hardware nuevo sin LEDs locales: se elimina secuencia visual post-carga.
+    // Se deja una ventana corta para que la base pinte el estado final y luego dormimos.
+    battery = getBattery();
+    lowBattery = battery < 15;
+    dockCommSetState(chargingDetected, battery, lowBattery, side);
+    dockBridgeSendStatusIfAllowed("POST_CHARGE", chargingDetected);
+    delay(500);
+    goToSleep();
+  }
+}
