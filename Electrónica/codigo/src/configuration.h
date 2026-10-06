@@ -36,12 +36,19 @@ extern Adafruit_MPU6050 mpu;
 #define DFPLAYER_POWER_STABILIZE_MS 4000
 #define DFPLAYER_INIT_RETRIES 3
 #define DFPLAYER_AUTO_POWER_OFF_MS 60000
-#define DFPLAYER_SLEEP_WAIT_MS 10000
+#define DFPLAYER_SLEEP_WAIT_MS DFPLAYER_AUTO_POWER_OFF_MS
 
 // Pistas MP3 para eventos (carpeta /mp3)
-#define TRACK_EVENT_MOVEMENT 1
-#define TRACK_EVENT_TELEMETRY_OK 1
-#define TRACK_EVENT_WIFI_ERROR 2
+// 0 significa sin audio asignado. Ver AUDIO.md para preparar la SD.
+#define TRACK_EVENT_MOVEMENT 0
+#define TRACK_EVENT_TELEMETRY_OK 0
+#define TRACK_SIDE_0 1
+#define TRACK_SIDE_1 2
+#define TRACK_SIDE_2 3
+#define TRACK_SIDE_3 4
+#define TRACK_SIDE_4 5
+#define TRACK_SIDE_5 6
+#define TRACK_EVENT_WIFI_ERROR 12
 
 // UART con microcontrolador externo.
 // Si el cableado final invierte TX/RX, intercambiar estos dos defines.

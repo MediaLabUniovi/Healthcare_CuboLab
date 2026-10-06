@@ -6,7 +6,11 @@ uint16_t trackForSide(int side) {
   if (side < 0 || side > 5) {
     return TRACK_EVENT_TELEMETRY_OK;
   }
-  return (uint16_t)(side + 1);
+  static const uint16_t tracks[] = {
+    TRACK_SIDE_0, TRACK_SIDE_1, TRACK_SIDE_2,
+    TRACK_SIDE_3, TRACK_SIDE_4, TRACK_SIDE_5
+  };
+  return tracks[side];
 }
 }  // namespace
 

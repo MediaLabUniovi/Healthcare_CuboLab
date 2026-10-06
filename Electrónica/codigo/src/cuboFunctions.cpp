@@ -109,22 +109,11 @@ boolean connectWiFi(){
     delayLab(5000); // Espera un momento para la conexión
   }
 
-  if (attempts  >= 9) {
-    // To-Do: Realiza alguna acción si no se puede conectar después de 10 intentos
-    Serial.println("No se pudo conectar a la red WiFi después de 10 intentos.");
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("No se pudo conectar a la red WiFi después de 20 intentos.");
 
     // Hardware nuevo sin LEDs locales: se mantiene solo feedback por audio.
     playEventTrack(TRACK_EVENT_WIFI_ERROR);
-    delayLab(300);
-    delayLab(300);
-
-    playEventTrack(TRACK_EVENT_WIFI_ERROR);
-    delayLab(500);
-    delayLab(500);
-
-    playEventTrack(TRACK_EVENT_WIFI_ERROR);
-    delayLab(1000);
-    delayLab(500);
 
 
     return false;

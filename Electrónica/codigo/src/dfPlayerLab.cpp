@@ -19,7 +19,7 @@ unsigned long powerOnTimestampMs = 0;
 
 // true  -> usa /mp3/0001.mp3 mediante playMp3Folder()
 // false -> usa raíz 0001.mp3 mediante play()
-constexpr bool kUseMp3FolderLayout = false;
+constexpr bool kUseMp3FolderLayout = true;
 
 void waitWithTimer(unsigned long waitMs) {
   unsigned long start = millis();
@@ -125,8 +125,24 @@ bool initDfPlayer() {
 
 void playEventTrack(uint16_t trackId) {
 #if ENABLE_DFPLAYER
-  if (!dfPlayerReady && !initDfPlayer()) {
+  if (trackId == 0) {
     return;
+  }
+  processDfPlayerTimers();
+  // No interrumpir una locución ni prolongar su plazo con nuevas peticiones.
+  if (powerOffScheduled) {
+    Serial.printf("DFPlayer ocupado; pista %u omitida.\n", trackId);
+    return;
+  }
+  if (!dfPlayerReady && !initDfPlayer()) {
+    dfPlayerPowerOff();
+    return;
+  }
+
+  // Consumir avisos antiguos antes de iniciar una nueva reproducción.
+  while (dfPlayer.available()) {
+    (void)dfPlayer.readType();
+    (void)dfPlayer.read();
   }
 
   if (kUseMp3FolderLayout) {
@@ -137,11 +153,7 @@ void playEventTrack(uint16_t trackId) {
     dfPlayer.play(trackId);
   }
 
-  // readState() puede devolver -1 incluso reproduciendo; se deja solo como traza.
-  waitWithTimer(120);
-  int state = dfPlayer.readState();
-  Serial.printf("DFPlayer state tras PLAY=%d\n", state);
-
+  // Respaldo si el módulo no comunica el fin de reproducción.
   scheduleDfPlayerPowerOff(DFPLAYER_AUTO_POWER_OFF_MS);
 #else
   (void)trackId;
@@ -163,6 +175,17 @@ void scheduleDfPlayerPowerOff(uint32_t delayMs) {
 
 void processDfPlayerTimers() {
 #if ENABLE_DFPLAYER
+  if (dfPlayerReady && dfPlayer.available()) {
+    uint8_t type = dfPlayer.readType();
+    int value = dfPlayer.read();
+    if (powerOffScheduled &&
+        (type == DFPlayerPlayFinished || type == DFPlayerError ||
+         type == DFPlayerCardRemoved)) {
+      Serial.printf("DFPlayer evento=%u valor=%d; apagando.\n", type, value);
+      dfPlayerPowerOff();
+      return;
+    }
+  }
   if (!powerOffScheduled) {
     return;
   }
