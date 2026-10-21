@@ -42,7 +42,15 @@ En ese estado, el LED verde varía de brillo y queda encendido cuando la estimac
 
 Los LED usan lógica invertida: `0` enciende y `255` apaga. Los pines se definen en [configuration.h](Electrónica/codigo/src/configuration.h), salvo GPIO34, utilizado directamente en [cuboFunctions.cpp](Electrónica/codigo/src/cuboFunctions.cpp).
 
-La batería se estima con los límites ADC `minBatt = 2630` y `maxBatt = 3680`. Deben corresponder al divisor y a la alimentación del montaje. Los esquemas de PCB anteriores no están incluidos en esta versión; queda pendiente confirmar el hardware de alimentación para documentar baterías, cargador y conexiones de potencia.
+## Alimentación y carga
+
+El montaje utiliza dos baterías 18650 conectadas en serie (configuración **2S**), un BMS **LXLCBT** y un **TPS61023**.
+
+La carga se realiza mediante **pines pogo** o, en su ausencia, mediante el **conector USB tipo C del módulo LXLCBT**.
+
+La documentación de los módulos está disponible en [LXLCBT.pdf](Electrónica/hardware/datasheet/LXLCBT.pdf) y [TPS61023.PDF](Electrónica/hardware/datasheet/TPS61023.PDF). Los esquemas de PCB anteriores no están incluidos en esta versión.
+
+El firmware estima la batería con los límites ADC `minBatt = 2630` y `maxBatt = 3680`. Estos valores deben corresponder al divisor de medida y a la alimentación del montaje; el porcentaje mostrado es una estimación basada en la lectura ADC.
 
 ## Compilación y carga
 
