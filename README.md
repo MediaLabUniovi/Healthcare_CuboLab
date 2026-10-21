@@ -14,7 +14,7 @@ This repository contains the code and schematics for an **Emotions cube** projec
 
 - **3-D printed faces and structure**
 - **ESP32-WROOM-32**
-- **18650 Bateries**
+- **1850 Bateries**
 - **IMU and other electronic components**
 
 <img src="https://github.com/user-attachments/assets/579a614f-7863-444f-83a4-882f781875a8" alt="Cubo Abierto" width="400">

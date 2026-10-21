@@ -12,10 +12,8 @@ extern float az_values[6];  // Para almacenar az de cada lado
 extern int minBatt;
 extern int maxBatt;
 
-bool isChargingActive();
-bool isConfigButtonPressed();
-
 void getLimits();
+void initAudio();
 int determineCubeSide(float ax, float ay, float az);
 boolean connectWiFi();
 void ledsOff();

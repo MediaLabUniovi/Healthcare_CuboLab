@@ -1,6 +1,76 @@
 #include "cuboFunctions.h"
-#include "dfPlayerLab.h"
-#include <driver/rtc_io.h>
+
+namespace {
+bool dfPlayerReady = false;
+constexpr unsigned long buzzerDurationMs = 180;
+
+// DFPlayer UART protocol: start, version, length, command, feedback,
+// parameter MSB/LSB, checksum MSB/LSB, end.
+void sendAudioCommand(uint8_t command, uint16_t parameter) {
+  uint8_t frame[10] = {0x7e, 0xff, 0x06, command, 0x00,
+                       uint8_t(parameter >> 8), uint8_t(parameter), 0, 0, 0xef};
+  uint16_t checksum = 0;
+  for (int i = 1; i <= 6; ++i) checksum -= frame[i];
+  frame[7] = checksum >> 8;
+  frame[8] = checksum;
+  Serial2.write(frame, sizeof(frame));
+  Serial2.flush();
+}
+
+bool waitForVolumeResponse() {
+  uint8_t frame[10];
+  size_t length = 0;
+  unsigned long started = millis();
+  while (millis() - started < 1500) {
+    if (!Serial2.available()) {
+      delay(1);
+      continue;
+    }
+    uint8_t value = Serial2.read();
+    if (length == 0 && value != 0x7e) continue;
+    frame[length++] = value;
+    if (length != sizeof(frame)) continue;
+    length = 0;
+    uint16_t checksum = 0;
+    for (int i = 1; i <= 6; ++i) checksum -= frame[i];
+    if (frame[1] == 0xff && frame[2] == 0x06 && frame[3] == 0x43 &&
+        frame[5] == 0 && frame[6] <= 30 && frame[9] == 0xef &&
+        frame[7] == uint8_t(checksum >> 8) && frame[8] == uint8_t(checksum)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void playAudioEvent(uint16_t track) {
+  if (dfPlayerReady) {
+    sendAudioCommand(0x12, track); // /mp3/0001.mp3, /mp3/0002.mp3
+  } else {
+    tone(BUZZER_PIN, 880, buzzerDurationMs);
+    // Complete the beep before callers can enter deep sleep.
+    delay(buzzerDurationMs);
+    noTone(BUZZER_PIN);
+  }
+}
+}
+
+void initAudio() {
+  dfPlayerReady = false; // Probe again at every boot, including deep-sleep wakeup.
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+  Serial2.begin(9600, SERIAL_8N1, DFPLAYER_RX_PIN, DFPLAYER_TX_PIN);
+  delay(1000); // Allow the module and SD card to start.
+  while (Serial2.available()) Serial2.read();
+  sendAudioCommand(0x43, 0); // Query volume; require a valid response.
+  dfPlayerReady = waitForVolumeResponse();
+  if (dfPlayerReady) {
+    sendAudioCommand(0x06, 20); // Volume: 0..30.
+    delay(100);
+    Serial.println("Audio: DFPlayer disponible.");
+  } else {
+    Serial.println("Audio: DFPlayer sin respuesta; buzzer en GPIO4.");
+  }
+}
 
 boolean networksAvailable = false;
 String networks = "";
@@ -11,16 +81,8 @@ float ax_values[6];  // Para almacenar ax de cada lado
 float ay_values[6];  // Para almacenar ay de cada lado
 float az_values[6];  // Para almacenar az de cada lado
 
-int minBatt = 5950; // mV de batería mínima
-int maxBatt = 8200; // mV de batería máxima
-
-bool isChargingActive() {
-  return digitalRead(CHARGE_PIN) == CHARGE_ACTIVE_LEVEL;
-}
-
-bool isConfigButtonPressed() {
-  return digitalRead(CONFIG_BUTTON_PIN) == CONFIG_BUTTON_ACTIVE_LEVEL;
-}
+int minBatt = 2630; // Valor mínimo de la batería con divisor de 0.35: 5,95V
+int maxBatt = 3680; // Valor mínimo de la batería con divisor de 0.35: 8,2V
 
 void getLimits() {
   /* Recuperar los valores de los ejes x, y , z de la memoria no volatil para cada lado del cubo después de un reseteo */
@@ -109,11 +171,25 @@ boolean connectWiFi(){
     delayLab(5000); // Espera un momento para la conexión
   }
 
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("No se pudo conectar a la red WiFi después de 20 intentos.");
+  if (attempts  >= 9) {
+    // To-Do: Realiza alguna acción si no se puede conectar después de 10 intentos
+    Serial.println("No se pudo conectar a la red WiFi después de 10 intentos.");
 
-    // Hardware nuevo sin LEDs locales: se mantiene solo feedback por audio.
-    playEventTrack(TRACK_EVENT_WIFI_ERROR);
+    analogWrite(led_r, 0);
+    playAudioEvent(2);
+    delayLab(300);
+    analogWrite(led_r, 255);
+    delayLab(300);
+
+    analogWrite(led_r, 0);
+    delayLab(500);
+    analogWrite(led_r, 255);
+    delayLab(500);
+
+    analogWrite(led_r, 0);
+    delayLab(1000);
+    analogWrite(led_r, 255);
+    delayLab(500);
 
 
     return false;
@@ -123,7 +199,10 @@ boolean connectWiFi(){
 }
 
 void ledsOff(){
-  // Hardware actual sin LEDs en el dispositivo principal.
+  // La lógica de los leds está invertida
+    analogWrite(led_r, 255);
+    analogWrite(led_g, 255);
+    analogWrite(led_b, 255);
 }
 
 void delayLab(long wait){
@@ -133,78 +212,85 @@ void delayLab(long wait){
 }
 
 void sendHMI(){
-  // En arquitectura de doble micro, la interfaz visual vive en la base.
-  // El audio queda reservado para confirmación de servidor en telemetryLab.
+  // Función para indicar que se ha detectado un movimiento
+    ledsOff();
+    analogWrite(led_g, 0);
+    playAudioEvent(1);
 }
 
 
 void configHMI(){
-  // Interfaz local desactivada: la base con OLED mostrará el estado de configuración.
+  // Función para indicar que se está configurando el cubo
+    ledsOff();
+    analogWrite(led_b, 255);
+    analogWrite(led_g, 255);
+    analogWrite(led_r, 0);
+    delayLab(500);
+    analogWrite(led_g, 0);
+    analogWrite(led_b, 255);
+    analogWrite(led_r, 255);
+    delayLab(500);
 }
 
 void chargingHMI(){
-  // Interfaz local desactivada: la base con OLED mostrará el estado de carga.
+  // Función para indicar que se está cargando el cubo
+    if (getBattery()==100){
+      analogWrite(led_g, 0);
+    } else{
+    ledsOff();
+    for (int brillo = 0; brillo <= 255; brillo++) {
+    analogWrite(led_g, brillo);
+    delayLab(10);
+    }
+
+    for (int brillo = 255; brillo >= 0; brillo--) {
+    analogWrite(led_g, brillo);
+    delayLab(10);
+    }
+    ledsOff();
+  }
 }
 
 void testLowBattery(){
-  // Sin LED local en esta revisión de hardware.
+  // Función para probar el estado de la batería
+  if(lowBattery){
+    analogWrite(led_r, 0);
+  }
+  else{
+    analogWrite(led_r, 255);
+  }
 }
 
 int getBattery(){
-  // Promediar lecturas para reducir ruido del ADC en deep-sleep wakeups.
-  const int kSamples = 16;
-  uint32_t rawAccum = 0;
-  uint32_t mvAccum = 0;
-
-  for (int i = 0; i < kSamples; i++) {
-    rawAccum += analogRead(BATTERY_ADC_PIN);
-    mvAccum += analogReadMilliVolts(BATTERY_ADC_PIN);
+  // Leer el valor de la batería
+  int batt = analogRead(34);
+  Serial.print("Battery Read: ");
+  Serial.println(batt);
+  if (batt<minBatt){batt = 0;}
+  else{
+     batt = batt-minBatt;
   }
-
-  float adcRaw = rawAccum / (float)kSamples;
-  float adcVoltage = (mvAccum / (float)kSamples) / 1000.0f;
-
-  // Fallback si la calibracion por mV no estuviera disponible.
-  if (adcVoltage <= 0.01f) {
-    adcVoltage = (adcRaw * ADC_REF_VOLTAGE) / ADC_MAX_READING;
-  }
-
-  float batteryVoltage = adcVoltage * BATTERY_DIVIDER_RATIO * BATTERY_CALIBRATION_FACTOR;
-
-  float batt = (batteryVoltage - BATTERY_VOLTAGE_MIN) * 100.0f / (BATTERY_VOLTAGE_MAX - BATTERY_VOLTAGE_MIN);
-
-  /*Serial.print("Battery Read: ");
-  Serial.println((int)roundf(adcRaw));
-  Serial.print("Battery Voltage: ");
-  Serial.println(batteryVoltage, 3);*/
-
-  if (batt < 0) {
-    batt = 0;
-  }
-  if (batt > 100) {
-    batt = 100;
-  }
-
-  return (int)batt;
+  batt = batt * 100 / (maxBatt-minBatt);
+  if (batt>100){batt = 100;}
+  return batt;
 }
 
 void goToSleep(){
-  dfPlayerPowerOff();
-
+    // Función para poner el dispositivo en modo de bajo consumo
     if(lowBattery){
       Serial.println("Low Battery");
+      analogWrite(led_r, 0);
       delay(500);
+      gpio_hold_en(GPIO_NUM_25);  // GPIO de led_r
+      gpio_deep_sleep_hold_en();  // Habilitar GPIO hold para deep sleep
 
     }
 
     // Entrar en modo deep sleep para ahorrar batería
     Serial.println("Entrando en modo de bajo consumo.");
 
-    // Wake por movimiento/carga (alto) y por botón de configuración (bajo).
-    esp_sleep_enable_ext1_wakeup((1ULL << MPU_INT_PIN) | (1ULL << CHARGE_PIN), ESP_EXT1_WAKEUP_ANY_HIGH);
-    rtc_gpio_pullup_en((gpio_num_t)CONFIG_BUTTON_PIN);
-    rtc_gpio_pulldown_dis((gpio_num_t)CONFIG_BUTTON_PIN);
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)CONFIG_BUTTON_PIN, 0);
+    // Habilitar desperetar por interrupción en movimiento e interrupción de carga
+    esp_sleep_enable_ext1_wakeup((1ULL << MPU_INT_PIN) | (1ULL << CHARGE_PIN), ESP_EXT1_WAKEUP_ANY_HIGH); 
     esp_deep_sleep_start();  // Entrar en modo deep sleep
 }
 
